@@ -42,7 +42,7 @@ def call_deepseek_stream(api_key, api_url, messages):
         'messages': messages,
         'stream': True,
         'temperature': 0.3,
-        'max_tokens': 8000
+        'max_tokens': 8192
     }
 
     try:
@@ -51,7 +51,7 @@ def call_deepseek_stream(api_key, api_url, messages):
             headers=headers,
             json=payload,
             stream=True,
-            timeout=300
+            timeout=600
         )
 
         if resp.status_code != 200:
