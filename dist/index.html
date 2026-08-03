@@ -13,10 +13,37 @@
       <h1>天 书</h1>
       <p class="subtitle">《管理世界》《经济研究》融合型中文顶刊语言润色系统</p>
       <p class="brand">壬镜科技出品 · siyee1@163.com</p>
-    </header>
-
-    <div class="container">
-      <!-- Controls -->
+      <button class="settings-btn" @click="showSettings = !showSettings" :title="showSettings ? '关闭设置' : 'API 设置'">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
++      </button>
++    </header>
++
++    <div class="container">
++      <!-- API Settings Panel -->
++      <div class="settings-panel" v-if="showSettings">
++        <div class="settings-card">
++          <label>DeepSeek API Key</label>
++          <div class="api-key-row">
++            <input :type="showKey ? 'text' : 'password'"
++                   v-model="apiKey"
++                   placeholder="sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
++                   class="api-key-input">
++            <button class="btn-toggle-key" @click="showKey = !showKey">
++              {{ showKey ? '隐藏' : '显示' }}
++            </button>
++          </div>
++          <p class="settings-hint">API Key 仅保存在浏览器本地，不会上传到服务器。留空则使用服务器默认Key。</p>
++          <div class="settings-actions">
++            <button class="btn-secondary" @click="testApiKey" :disabled="testingKey">
++              {{ testingKey ? '测试中...' : '测试连接' }}
++            </button>
++            <button class="btn-secondary" @click="apiKey = ''; showSettings = false">关闭</button>
++            <span class="test-result" v-if="testResult" :class="{ success: testOk, fail: !testOk }">{{ testResult }}</span>
++          </div>
++        </div>
++      </div>
++
++      <!-- Controls -->
       <div class="controls-row">
         <div class="control-group">
           <label>文本类型</label>

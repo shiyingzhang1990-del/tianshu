@@ -35,6 +35,12 @@ const App = {
     const polishing = ref(false);
     const resultText = ref('');
     const resultTab = ref('polished');
+    const showSettings = ref(false);
+    const showKey = ref(false);
+    const apiKey = ref(localStorage.getItem('tianshu_api_key') || '');
+    const testingKey = ref(false);
+    const testResult = ref('');
+    const testOk = ref(false);
 
     const textTypes = [
       { value: 'abstract', label: '摘要' },
@@ -65,10 +71,15 @@ const App = {
       return t ? t.label : '完整论文';
     }
 
+    function saveApiKey() {
+      localStorage.setItem('tianshu_api_key', apiKey.value);
+    }
+
     async function startPolish() {
       if (!textInput.value.trim() || polishing.value) return;
       polishing.value = true;
       resultText.value = '';
+      saveApiKey();
       try {
         const res = await fetch(`${API}/api/polish`, {
           method: 'POST',
@@ -76,7 +87,8 @@ const App = {
           body: JSON.stringify({
             text: textInput.value.trim(),
             style_mode: styleMode.value,
-            text_type: textType.value
+            text_type: textType.value,
+            api_key: apiKey.value
           })
         });
         if (!res.ok) throw new Error('请求失败');
@@ -136,6 +148,40 @@ const App = {
       }
     }
 
+    async function testApiKey() {
+      if (!apiKey.value.trim()) {
+        testResult.value = '请先输入 API Key';
+        testOk.value = false;
+        return;
+      }
+      testingKey.value = true;
+      testResult.value = '';
+      saveApiKey();
+      try {
+        const res = await fetch(`${API}/api/polish`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            text: '测试连接',
+            style_mode: 'C',
+            text_type: 'abstract',
+            api_key: apiKey.value
+          })
+        });
+        if (res.ok) {
+          testResult.value = 'API Key 有效 ✓';
+          testOk.value = true;
+        } else {
+          testResult.value = '连接失败 (HTTP ' + res.status + ')';
+          testOk.value = false;
+        }
+      } catch(e) {
+        testResult.value = '网络连接失败，请检查API Key';
+        testOk.value = false;
+      }
+      testingKey.value = false;
+    }
+
     function clearAll() {
       textInput.value = '';
       resultText.value = '';
@@ -143,8 +189,10 @@ const App = {
 
     return {
       textInput, styleMode, textType, polishing, resultText, resultTab,
+      showSettings, showKey, apiKey, testingKey, testResult, testOk,
       textTypes, styleModes, charCount,
       startPolish, scrollToResult, downloadResult, copyResult, clearAll,
+      testApiKey, saveApiKey,
       renderMarkdown, getTypeLabel
     };
   }

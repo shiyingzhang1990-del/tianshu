@@ -97,7 +97,7 @@ def polish_text():
         if style_mode not in STYLE_MODES:
             style_mode = 'C'
 
-        api_key = current_app.config.get('DEEPSEEK_API_KEY', '')
+        api_key = data.get('api_key', '') or current_app.config.get('DEEPSEEK_API_KEY', '')
         api_url = current_app.config.get('DEEPSEEK_API_URL', 'https://api.deepseek.com')
 
         if not api_key:
