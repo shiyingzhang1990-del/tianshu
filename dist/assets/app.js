@@ -80,6 +80,7 @@ const App = {
       polishing.value = true;
       resultText.value = '';
       saveApiKey();
+      let errorMsg = '';
       try {
         const res = await fetch(`${API}/api/polish`, {
           method: 'POST',
@@ -91,33 +92,46 @@ const App = {
             api_key: apiKey.value
           })
         });
-        if (!res.ok) throw new Error('请求失败');
-        const reader = res.body.getReader();
-        const decoder = new TextDecoder();
-        let full = '';
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          const text = decoder.decode(value);
-          const lines = text.split('\n');
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
+        if (!res.ok) {
+          try {
+            const err = await res.json();
+            errorMsg = (err && err.error) || ('请求失败 (HTTP ' + res.status + ')');
+          } catch (e) {
+            errorMsg = '请求失败 (HTTP ' + res.status + ')';
+          }
+        } else {
+          const reader = res.body.getReader();
+          const decoder = new TextDecoder();
+          let full = '';
+          let buffer = '';
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+            for (const line of lines) {
+              const payload = line.trim();
+              if (!payload.startsWith('data:')) continue;
+              const jsonStr = payload.slice(5).trim();
+              if (!jsonStr || jsonStr === '[DONE]') continue;
               try {
-                const data = JSON.parse(line.slice(6));
+                const data = JSON.parse(jsonStr);
                 if (data.type === 'content') {
                   full += data.data;
                   resultText.value = full;
                 } else if (data.type === 'error') {
-                  resultText.value = '润色出错：' + data.data;
+                  errorMsg = data.data;
                 }
               } catch(e) {}
             }
           }
+          if (!errorMsg && !full) errorMsg = '未收到润色结果，请重试。';
         }
-        if (!full) resultText.value = '未收到润色结果，请重试。';
       } catch(e) {
-        resultText.value = '网络连接失败，请检查服务器或API Key配置。';
+        errorMsg = '网络连接失败，请检查服务器或API Key配置。';
       }
+      if (errorMsg) resultText.value = errorMsg;
       polishing.value = false;
       scrollToResult();
     }
