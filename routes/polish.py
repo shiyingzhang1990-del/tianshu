@@ -138,3 +138,47 @@ def polish_text():
         import traceback
         traceback.print_exc()
         return jsonify({'error': f'服务器错误: {str(e)}'}), 500
+
+
+@polish_bp.route('/test-key', methods=['POST'])
+def test_key():
+    """校验 DeepSeek API Key 是否有效（非流式，返回真实 HTTP 状态码）"""
+    try:
+        data = request.get_json()
+        api_key = data.get('api_key', '') or current_app.config.get('DEEPSEEK_API_KEY', '')
+        api_url = current_app.config.get('DEEPSEEK_API_URL', 'https://api.deepseek.com')
+
+        if not api_key:
+            return jsonify({'error': '请先配置 DeepSeek API Key'}), 400
+
+        headers = {
+            'Content-Type': 'application/json',
+            'Authorization': f'Bearer {api_key}'
+        }
+        payload = {
+            'model': 'deepseek-chat',
+            'messages': [{'role': 'user', 'content': 'ping'}],
+            'max_tokens': 1,
+            'stream': False
+        }
+        resp = requests.post(
+            f"{api_url}/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=30
+        )
+
+        if resp.status_code == 200:
+            return jsonify({'ok': True, 'message': 'API Key 有效'}), 200
+        elif resp.status_code == 401:
+            return jsonify({'error': 'API Key 无效或已过期 (HTTP 401)'}), 401
+        elif resp.status_code == 403:
+            return jsonify({'error': 'API Key 无权限 (HTTP 403)'}), 403
+        elif resp.status_code == 429:
+            return jsonify({'error': '请求过于频繁或额度不足 (HTTP 429)'}), 429
+        else:
+            return jsonify({'error': f'API 请求失败 (HTTP {resp.status_code})'}), resp.status_code
+    except requests.exceptions.Timeout:
+        return jsonify({'error': '连接超时，请检查网络或稍后重试'}), 504
+    except requests.exceptions.RequestException as e:
+        return jsonify({'error': f'网络连接失败: {str(e)}'}), 502

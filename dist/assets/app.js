@@ -158,21 +158,17 @@ const App = {
       testResult.value = '';
       saveApiKey();
       try {
-        const res = await fetch(`${API}/api/polish`, {
+        const res = await fetch(`${API}/api/test-key`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            text: '测试连接',
-            style_mode: 'C',
-            text_type: 'abstract',
-            api_key: apiKey.value
-          })
+          body: JSON.stringify({ api_key: apiKey.value })
         });
+        const data = await res.json().catch(() => ({}));
         if (res.ok) {
           testResult.value = 'API Key 有效 ✓';
           testOk.value = true;
         } else {
-          testResult.value = '连接失败 (HTTP ' + res.status + ')';
+          testResult.value = data.error || ('连接失败 (HTTP ' + res.status + ')');
           testOk.value = false;
         }
       } catch(e) {
