@@ -142,7 +142,7 @@ def polish_text():
 
 @polish_bp.route('/test-key', methods=['POST'])
 def test_key():
-    """校验 DeepSeek API Key 是否有效（非流式，返回真实 HTTP 状态码）"""
+    """校验 DeepSeek API Key 是否有效（轻量 /models 接口，避免推理超时）"""
     try:
         data = request.get_json()
         api_key = data.get('api_key', '') or current_app.config.get('DEEPSEEK_API_KEY', '')
@@ -151,22 +151,8 @@ def test_key():
         if not api_key:
             return jsonify({'error': '请先配置 DeepSeek API Key'}), 400
 
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': f'Bearer {api_key}'
-        }
-        payload = {
-            'model': 'deepseek-chat',
-            'messages': [{'role': 'user', 'content': 'ping'}],
-            'max_tokens': 1,
-            'stream': False
-        }
-        resp = requests.post(
-            f"{api_url}/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=30
-        )
+        headers = {'Authorization': f'Bearer {api_key}'}
+        resp = requests.get(f"{api_url}/v1/models", headers=headers, timeout=60)
 
         if resp.status_code == 200:
             return jsonify({'ok': True, 'message': 'API Key 有效'}), 200
@@ -179,6 +165,6 @@ def test_key():
         else:
             return jsonify({'error': f'API 请求失败 (HTTP {resp.status_code})'}), resp.status_code
     except requests.exceptions.Timeout:
-        return jsonify({'error': '连接超时，请检查网络或稍后重试'}), 504
+        return jsonify({'error': '连接 DeepSeek 超时，请稍后重试'}), 504
     except requests.exceptions.RequestException as e:
         return jsonify({'error': f'网络连接失败: {str(e)}'}), 502
