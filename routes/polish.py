@@ -32,16 +32,15 @@ TEXT_TYPES = {
 }
 
 
-def call_deepseek_stream(api_key, api_url, messages):
+def call_llm_stream(api_key, api_url, model, messages):
     headers = {
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {api_key}'
     }
     payload = {
-        'model': 'deepseek-chat',
+        'model': model,
         'messages': messages,
         'stream': True,
-        'temperature': 0.3,
         'max_tokens': 8192
     }
 
@@ -97,12 +96,13 @@ def polish_text():
         if style_mode not in STYLE_MODES:
             style_mode = 'C'
 
-        api_key = data.get('api_key', '') or current_app.config.get('DEEPSEEK_API_KEY', '')
-        api_url = current_app.config.get('DEEPSEEK_API_URL', 'https://api.deepseek.com')
+        api_key = data.get('api_key', '') or current_app.config.get('LLM_API_KEY', '')
+        api_url = current_app.config.get('LLM_API_URL', 'https://api.moonshot.cn')
+        model = current_app.config.get('LLM_MODEL', 'kimi-k2.6')
 
         if not api_key:
             def no_key_gen():
-                yield f"data: {json.dumps({'type': 'error', 'data': '请先配置 DeepSeek API Key'}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'data': '请先配置 API Key'}, ensure_ascii=False)}\n\n"
             return Response(stream_with_context(no_key_gen()), mimetype='text/event-stream')
 
         style_desc = STYLE_MODES.get(style_mode, STYLE_MODES['C'])
@@ -120,7 +120,7 @@ def polish_text():
         ]
 
         def generate():
-            for chunk_type, chunk_content in call_deepseek_stream(api_key, api_url, messages):
+            for chunk_type, chunk_content in call_llm_stream(api_key, api_url, model, messages):
                 if chunk_type == 'content':
                     yield f"data: {json.dumps({'type': 'content', 'data': chunk_content}, ensure_ascii=False)}\n\n"
                 elif chunk_type == 'error':
@@ -142,14 +142,14 @@ def polish_text():
 
 @polish_bp.route('/test-key', methods=['POST'])
 def test_key():
-    """校验 DeepSeek API Key 是否有效（轻量 /models 接口，避免推理超时）"""
+    """校验 API Key 是否有效（轻量 /models 接口，避免推理超时）"""
     try:
         data = request.get_json()
-        api_key = data.get('api_key', '') or current_app.config.get('DEEPSEEK_API_KEY', '')
-        api_url = current_app.config.get('DEEPSEEK_API_URL', 'https://api.deepseek.com')
+        api_key = data.get('api_key', '') or current_app.config.get('LLM_API_KEY', '')
+        api_url = current_app.config.get('LLM_API_URL', 'https://api.moonshot.cn')
 
         if not api_key:
-            return jsonify({'error': '请先配置 DeepSeek API Key'}), 400
+            return jsonify({'error': '请先配置 API Key'}), 400
 
         headers = {'Authorization': f'Bearer {api_key}'}
         resp = requests.get(f"{api_url}/v1/models", headers=headers, timeout=60)
@@ -165,6 +165,6 @@ def test_key():
         else:
             return jsonify({'error': f'API 请求失败 (HTTP {resp.status_code})'}), resp.status_code
     except requests.exceptions.Timeout:
-        return jsonify({'error': '连接 DeepSeek 超时，请稍后重试'}), 504
+        return jsonify({'error': '连接超时，请稍后重试'}), 504
     except requests.exceptions.RequestException as e:
         return jsonify({'error': f'网络连接失败: {str(e)}'}), 502

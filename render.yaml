@@ -12,5 +12,9 @@ services:
         value: 3.10.0
       - key: SECRET_KEY
         generateValue: true
-      - key: DEEPSEEK_API_KEY
+      - key: LLM_API_KEY
         sync: false
+      - key: LLM_API_URL
+        value: https://api.moonshot.cn
+      - key: LLM_MODEL
+        value: kimi-k2.6
