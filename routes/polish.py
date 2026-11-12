@@ -31,22 +31,39 @@ TEXT_TYPES = {
     'full': '完整论文'
 }
 
+PROVIDERS = {
+    'deepseek': {
+        'api_url': 'https://api.deepseek.com',
+        'model': 'deepseek-chat',
+        'max_tokens': 8192,
+    },
+    'kimi': {
+        'api_url': 'https://api.moonshot.cn',
+        'model': 'kimi-k2.6',
+        'max_tokens': 16384,
+        # kimi-k2.6 是思考模型，润色不需要思维链；关掉思考避免 reasoning_content 耗尽 max_tokens 导致正文为空
+        'thinking': {'type': 'disabled'},
+    },
+}
 
-def call_llm_stream(api_key, api_url, model, messages):
+
+def call_llm_stream(api_key, provider_cfg, messages):
     headers = {
         'Content-Type': 'application/json',
         'Authorization': f'Bearer {api_key}'
     }
     payload = {
-        'model': model,
+        'model': provider_cfg['model'],
         'messages': messages,
         'stream': True,
-        'max_tokens': 8192
+        'max_tokens': provider_cfg.get('max_tokens', 8192)
     }
+    if provider_cfg.get('thinking'):
+        payload['thinking'] = provider_cfg['thinking']
 
     try:
         resp = requests.post(
-            f"{api_url}/v1/chat/completions",
+            f"{provider_cfg['api_url']}/v1/chat/completions",
             headers=headers,
             json=payload,
             stream=True,
@@ -54,7 +71,11 @@ def call_llm_stream(api_key, api_url, model, messages):
         )
 
         if resp.status_code != 200:
-            yield 'error', f'API请求失败 (HTTP {resp.status_code})'
+            try:
+                err_body = resp.text[:500]
+            except Exception:
+                err_body = ''
+            yield 'error', f'API请求失败 (HTTP {resp.status_code}) {err_body}'
             return
 
         for line in resp.iter_lines():
@@ -68,8 +89,11 @@ def call_llm_stream(api_key, api_url, model, messages):
                 try:
                     data = json.loads(data_str)
                     delta = data.get('choices', [{}])[0].get('delta', {})
-                    if 'content' in delta and delta['content']:
-                        yield 'content', delta['content']
+                    content = delta.get('content')
+                    if not content:
+                        content = delta.get('reasoning_content')
+                    if content:
+                        yield 'content', content
                 except (json.JSONDecodeError, KeyError, IndexError):
                     continue
     except requests.exceptions.Timeout:
@@ -96,9 +120,12 @@ def polish_text():
         if style_mode not in STYLE_MODES:
             style_mode = 'C'
 
+        provider = (data.get('provider') or 'kimi').lower()
+        provider_cfg = PROVIDERS.get(provider)
+        if not provider_cfg:
+            return jsonify({'error': '未知的模型提供商，仅支持 deepseek / kimi'}), 400
+
         api_key = data.get('api_key', '') or current_app.config.get('LLM_API_KEY', '')
-        api_url = current_app.config.get('LLM_API_URL', 'https://api.moonshot.cn')
-        model = current_app.config.get('LLM_MODEL', 'kimi-k2.6')
 
         if not api_key:
             def no_key_gen():
@@ -120,7 +147,7 @@ def polish_text():
         ]
 
         def generate():
-            for chunk_type, chunk_content in call_llm_stream(api_key, api_url, model, messages):
+            for chunk_type, chunk_content in call_llm_stream(api_key, provider_cfg, messages):
                 if chunk_type == 'content':
                     yield f"data: {json.dumps({'type': 'content', 'data': chunk_content}, ensure_ascii=False)}\n\n"
                 elif chunk_type == 'error':
@@ -145,14 +172,18 @@ def test_key():
     """校验 API Key 是否有效（轻量 /models 接口，避免推理超时）"""
     try:
         data = request.get_json()
+        provider = (data.get('provider') or 'kimi').lower()
+        provider_cfg = PROVIDERS.get(provider)
+        if not provider_cfg:
+            return jsonify({'error': '未知的模型提供商，仅支持 deepseek / kimi'}), 400
+
         api_key = data.get('api_key', '') or current_app.config.get('LLM_API_KEY', '')
-        api_url = current_app.config.get('LLM_API_URL', 'https://api.moonshot.cn')
 
         if not api_key:
             return jsonify({'error': '请先配置 API Key'}), 400
 
         headers = {'Authorization': f'Bearer {api_key}'}
-        resp = requests.get(f"{api_url}/v1/models", headers=headers, timeout=60)
+        resp = requests.get(f"{provider_cfg['api_url']}/v1/models", headers=headers, timeout=60)
 
         if resp.status_code == 200:
             return jsonify({'ok': True, 'message': 'API Key 有效'}), 200

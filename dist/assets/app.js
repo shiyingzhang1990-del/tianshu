@@ -37,7 +37,19 @@ const App = {
     const resultTab = ref('polished');
     const showSettings = ref(false);
     const showKey = ref(false);
-    const apiKey = ref(localStorage.getItem('tianshu_api_key') || '');
+    const provider = ref(localStorage.getItem('tianshu_provider') || 'kimi');
+    const apiKeys = ref({
+      deepseek: localStorage.getItem('tianshu_api_key_deepseek') || '',
+      kimi: localStorage.getItem('tianshu_api_key_kimi') || localStorage.getItem('tianshu_api_key') || ''
+    });
+    const apiKey = computed({
+      get() { return apiKeys.value[provider.value] || ''; },
+      set(v) { apiKeys.value[provider.value] = v; }
+    });
+    const providers = [
+      { value: 'kimi', label: 'Kimi (Moonshot)', model: 'kimi-k2.6' },
+      { value: 'deepseek', label: 'DeepSeek', model: 'deepseek-chat' }
+    ];
     const testingKey = ref(false);
     const testResult = ref('');
     const testOk = ref(false);
@@ -72,7 +84,8 @@ const App = {
     }
 
     function saveApiKey() {
-      localStorage.setItem('tianshu_api_key', apiKey.value);
+      localStorage.setItem('tianshu_api_key_' + provider.value, apiKeys.value[provider.value]);
+      localStorage.setItem('tianshu_provider', provider.value);
     }
 
     async function startPolish() {
@@ -89,6 +102,7 @@ const App = {
             text: textInput.value.trim(),
             style_mode: styleMode.value,
             text_type: textType.value,
+            provider: provider.value,
             api_key: apiKey.value
           })
         });
@@ -175,7 +189,7 @@ const App = {
         const res = await fetch(`${API}/api/test-key`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ api_key: apiKey.value })
+          body: JSON.stringify({ provider: provider.value, api_key: apiKey.value })
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok) {
@@ -199,7 +213,7 @@ const App = {
 
     return {
       textInput, styleMode, textType, polishing, resultText, resultTab,
-      showSettings, showKey, apiKey, testingKey, testResult, testOk,
+      showSettings, showKey, apiKey, provider, apiKeys, providers, testingKey, testResult, testOk,
       textTypes, styleModes, charCount,
       startPolish, scrollToResult, downloadResult, copyResult, clearAll,
       testApiKey, saveApiKey,
