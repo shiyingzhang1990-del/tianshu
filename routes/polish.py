@@ -40,7 +40,7 @@ PROVIDERS = {
     'kimi': {
         'api_url': 'https://api.moonshot.cn',
         'model': 'kimi-k2.6',
-        'max_tokens': 16384,
+        'max_tokens': 32768,
         # kimi-k2.6 是思考模型，润色不需要思维链；关掉思考避免 reasoning_content 耗尽 max_tokens 导致正文为空
         'thinking': {'type': 'disabled'},
     },
@@ -88,12 +88,16 @@ def call_llm_stream(api_key, provider_cfg, messages):
                     break
                 try:
                     data = json.loads(data_str)
-                    delta = data.get('choices', [{}])[0].get('delta', {})
+                    choice = data.get('choices', [{}])[0]
+                    delta = choice.get('delta', {})
+                    finish_reason = choice.get('finish_reason')
                     content = delta.get('content')
                     if not content:
                         content = delta.get('reasoning_content')
                     if content:
                         yield 'content', content
+                    if finish_reason == 'length':
+                        yield 'content', '\n\n---\n⚠️ 输出达到长度上限，内容可能被截断。建议将长文本分段后分别润色。\n'
                 except (json.JSONDecodeError, KeyError, IndexError):
                     continue
     except requests.exceptions.Timeout:
