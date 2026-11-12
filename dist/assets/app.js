@@ -53,6 +53,7 @@ const App = {
     const testingKey = ref(false);
     const testResult = ref('');
     const testOk = ref(false);
+    const statusMsg = ref('');
 
     const textTypes = [
       { value: 'abstract', label: '摘要' },
@@ -92,6 +93,7 @@ const App = {
       if (!textInput.value.trim() || polishing.value) return;
       polishing.value = true;
       resultText.value = '';
+      statusMsg.value = '';
       saveApiKey();
       let errorMsg = '';
       try {
@@ -134,6 +136,8 @@ const App = {
                 if (data.type === 'content') {
                   full += data.data;
                   resultText.value = full;
+                } else if (data.type === 'status') {
+                  statusMsg.value = data.data;
                 } else if (data.type === 'error') {
                   errorMsg = data.data;
                 }
@@ -214,7 +218,7 @@ const App = {
     return {
       textInput, styleMode, textType, polishing, resultText, resultTab,
       showSettings, showKey, apiKey, provider, apiKeys, providers, testingKey, testResult, testOk,
-      textTypes, styleModes, charCount,
+      statusMsg, textTypes, styleModes, charCount,
       startPolish, scrollToResult, downloadResult, copyResult, clearAll,
       testApiKey, saveApiKey,
       renderMarkdown, getTypeLabel

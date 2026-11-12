@@ -46,6 +46,31 @@ PROVIDERS = {
     },
 }
 
+# 长文分段润色阈值：超过该字符数则按段落切块逐段润色，避免单次输出超长被截断
+CHUNK_THRESHOLD = 4000
+CHUNK_SIZE = 3000
+
+CHUNK_USER_TEMPLATE = """请润色以下文本，保持原意、变量关系、事实数据和结论不变，只输出润色后的完整文本（不要任何诊断、说明、标题或前缀）：
+
+{text}"""
+
+
+def split_text(text, chunk_size=CHUNK_SIZE):
+    """按段落把文本切成不超过 chunk_size 字符的若干段，尽量在段落边界断开。"""
+    paragraphs = text.split('\n')
+    chunks = []
+    current = ''
+    for p in paragraphs:
+        piece = p.rstrip()
+        if current and len(current) + len(piece) + 1 > chunk_size:
+            chunks.append(current.strip())
+            current = piece
+        else:
+            current = (current + '\n' + piece) if current else piece
+    if current.strip():
+        chunks.append(current.strip())
+    return chunks
+
 
 def call_llm_stream(api_key, provider_cfg, messages):
     headers = {
@@ -139,24 +164,46 @@ def polish_text():
         style_desc = STYLE_MODES.get(style_mode, STYLE_MODES['C'])
         type_desc = TEXT_TYPES.get(text_type, '完整论文')
 
-        user_message = POLISH_USER_TEMPLATE.format(
-            style_mode=style_desc,
-            text_type=type_desc,
-            text=text
-        )
+        def sse(payload_type, data):
+            return f"data: {json.dumps({'type': payload_type, 'data': data}, ensure_ascii=False)}\n\n"
 
-        messages = [
-            {'role': 'system', 'content': POLISH_SYSTEM_PROMPT},
-            {'role': 'user', 'content': user_message}
-        ]
+        chunks = split_text(text)
 
         def generate():
-            for chunk_type, chunk_content in call_llm_stream(api_key, provider_cfg, messages):
-                if chunk_type == 'content':
-                    yield f"data: {json.dumps({'type': 'content', 'data': chunk_content}, ensure_ascii=False)}\n\n"
-                elif chunk_type == 'error':
-                    yield f"data: {json.dumps({'type': 'error', 'data': chunk_content}, ensure_ascii=False)}\n\n"
-                    return
+            if len(chunks) <= 1:
+                # 短文：三段式（问题诊断 + 完整润色稿 + 关键修改说明）
+                user_message = POLISH_USER_TEMPLATE.format(
+                    style_mode=style_desc,
+                    text_type=type_desc,
+                    text=text
+                )
+                messages = [
+                    {'role': 'system', 'content': POLISH_SYSTEM_PROMPT},
+                    {'role': 'user', 'content': user_message}
+                ]
+                for chunk_type, chunk_content in call_llm_stream(api_key, provider_cfg, messages):
+                    if chunk_type == 'content':
+                        yield sse('content', chunk_content)
+                    elif chunk_type == 'error':
+                        yield sse('error', chunk_content)
+                        return
+            else:
+                # 长文：逐段润色，避免单次输出超长被截断
+                for i, chunk in enumerate(chunks, 1):
+                    yield sse('status', f'正在润色第 {i}/{len(chunks)} 段…')
+                    if i > 1:
+                        yield sse('content', '\n\n')
+                    chunk_messages = [
+                        {'role': 'system', 'content': POLISH_SYSTEM_PROMPT},
+                        {'role': 'user', 'content': CHUNK_USER_TEMPLATE.format(text=chunk)}
+                    ]
+                    for chunk_type, chunk_content in call_llm_stream(api_key, provider_cfg, chunk_messages):
+                        if chunk_type == 'content':
+                            yield sse('content', chunk_content)
+                        elif chunk_type == 'error':
+                            yield sse('error', chunk_content)
+                            return
+                yield sse('status', '全部润色完成')
 
         return Response(
             stream_with_context(generate()),
@@ -203,3 +250,9 @@ def test_key():
         return jsonify({'error': '连接超时，请稍后重试'}), 504
     except requests.exceptions.RequestException as e:
         return jsonify({'error': f'网络连接失败: {str(e)}'}), 502
+
+
+@polish_bp.route('/health', methods=['GET'])
+def health():
+    """版本探针，用于确认线上部署是否已更新"""
+    return jsonify({'ok': True, 'version': '1.4', 'chunked': True}), 200

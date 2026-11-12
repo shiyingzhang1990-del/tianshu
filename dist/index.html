@@ -107,6 +107,7 @@
               <button class="btn-secondary" @click="downloadResult">下载 TXT</button>
             </div>
           </div>
+          <div class="result-status" v-if="statusMsg">{{ statusMsg }}</div>
           <div class="result-body" v-html="renderMarkdown(resultText)"></div>
         </div>
       </div>
